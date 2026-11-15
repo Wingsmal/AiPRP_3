@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Русско-английский словарь</title>
+<link rel="stylesheet" href="dictionary.css">
+</head>
+<body><main>
+<header><h1>Русско-английский словарь</h1></header>
+<section class="translator" aria-label="Перевод слова">
+<form name="frm" method="get" action="MyServlet" accept-charset="UTF-8">
+<label for="direction">Направление</label>
+<select id="direction" name="direction"><option value="ru-en">Русский → английский</option><option value="en-ru">Английский → русский</option></select>
+<label for="word">Слово</label>
+<div class="input-row">
+<input id="word" type="text" name="txt" maxlength="100" required aria-describedby="word-hint">
+<button type="submit">Перевести</button>
+</div>
+<p id="word-hint" class="hint">Например: кот, книга, мир или cat, book, world.</p>
+</form>
+</section>
+<section class="download" aria-labelledby="presentation-title">
+<h2 id="presentation-title">Презентация</h2>
+<a href="PresentationServlet">Скачать презентацию (.pptx)</a>
+<p class="hint">Для автоматического открытия используйте Java-клиент.</p>
+</section>
+</main></body></html>

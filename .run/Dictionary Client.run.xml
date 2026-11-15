@@ -1,0 +1,7 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="Dictionary Client" type="Application" factoryName="Application">
+    <option name="MAIN_CLASS_NAME" value="by.bsuir.client.ApacheClient" />
+    <module name="dictionary-client" />
+    <method v="2"><option name="Make" enabled="true" /></method>
+  </configuration>
+</component>
