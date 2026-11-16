@@ -20,7 +20,6 @@ public class PresentationServlet extends HttpServlet {
             }
             response.setContentType("application/vnd.openxmlformats-officedocument.presentationml.presentation");
             response.setHeader("Content-Disposition", "attachment; filename=\"presentation.pptx\"");
-            // Give Office both the file size (including for HEAD) and the binary content.
             byte[] content = file.readAllBytes();
             response.setContentLengthLong(content.length);
             response.getOutputStream().write(content);

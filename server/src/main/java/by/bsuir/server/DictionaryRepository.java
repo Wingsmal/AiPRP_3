@@ -22,7 +22,6 @@ public final class DictionaryRepository {
     }
 
     public List<String> translate(String word, String direction) throws SQLException {
-        // Column names come only from these constants; user input is a bound parameter.
         String source = direction.equals("ru-en") ? "russian" : "english";
         String target = direction.equals("ru-en") ? "english" : "russian";
         try (Connection connection = dataSource.getConnection();
