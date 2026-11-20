@@ -6,11 +6,20 @@ import org.apache.http.client.methods.HttpGet;
 import org.apache.http.entity.ContentType;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClients;
-import java.awt.Desktop;
+import org.apache.poi.xslf.usermodel.XMLSlideShow;
+import org.apache.poi.xslf.usermodel.XSLFSlide;
+
+import java.awt.Dimension;
+import java.awt.Graphics2D;
+import java.awt.RenderingHints;
+import java.awt.image.BufferedImage;
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 
 public final class PresentationClient {
     private static final String MIME = "application/vnd.openxmlformats-officedocument.presentationml.presentation";
@@ -50,18 +59,49 @@ public final class PresentationClient {
         }
     }
 
-    public static Path downloadAndOpen() throws IOException {
+    public static List<BufferedImage> downloadAndRender() throws IOException {
         Path file = download();
-        try {
-            if (!Desktop.isDesktopSupported() || !Desktop.getDesktop().isSupported(Desktop.Action.OPEN)) {
-                throw new IOException("Автоматическое открытие файлов не поддерживается.");
+        List<BufferedImage> images = new ArrayList<>();
+
+        try (FileInputStream fis = new FileInputStream(file.toFile());
+             XMLSlideShow ppt = new XMLSlideShow(fis)) {
+
+            Dimension pgsize = ppt.getPageSize();
+            List<XSLFSlide> slides = ppt.getSlides();
+
+            if (slides.isEmpty()) {
+                throw new IOException("Презентация пустая (нет слайдов).");
             }
-            Desktop.getDesktop().open(file.toFile());
-        } catch (IOException | UnsupportedOperationException | SecurityException e) {
-            throw new IOException("Не удалось открыть презентацию. Файл сохранён: " + file
-                    + ". Проверьте приложение по умолчанию для .pptx.", e);
+
+
+            double targetWidth = 700.0;
+            double scale = targetWidth / pgsize.width;
+
+            scale = Math.min(1.0, scale);
+
+            int scaledWidth = (int) (pgsize.width * scale);
+            int scaledHeight = (int) (pgsize.height * scale);
+
+            for (XSLFSlide slide : slides) {
+                BufferedImage img = new BufferedImage(scaledWidth, scaledHeight, BufferedImage.TYPE_INT_RGB);
+                Graphics2D graphics = img.createGraphics();
+
+                graphics.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                graphics.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
+                graphics.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BICUBIC);
+
+                graphics.scale(scale, scale);
+
+                graphics.setPaint(java.awt.Color.WHITE);
+                graphics.fill(new java.awt.geom.Rectangle2D.Float(0, 0, pgsize.width, pgsize.height));
+
+                slide.draw(graphics);
+                images.add(img);
+                graphics.dispose();
+            }
+        } catch (Exception e) {
+            throw new IOException("Ошибка при чтении презентации через POI: " + e.getMessage(), e);
         }
-        // Keep the file after the client exits: PowerPoint can continue using it.
-        return file;
+        return images;
     }
 }
