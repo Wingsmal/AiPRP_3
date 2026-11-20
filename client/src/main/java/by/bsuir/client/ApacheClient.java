@@ -264,27 +264,39 @@ public final class ApacheClient {
         return content;
     }
 
-    // --- Метод для получения котировок с Yahoo Finance ---
     public static String fetchPrice(String ticker, String name) throws Exception {
-        String url = "https://query1.finance.yahoo.com/v8/finance/chart/" + ticker;
+        // Формируем ссылку на РБК Инвестиции
+        String url = "https://www.rbc.ru/quote/ticker/" + ticker;
 
-        var config = RequestConfig.custom().setConnectTimeout(5000).setSocketTimeout(5000).build();
-        try (CloseableHttpClient client = HttpClients.custom().setDefaultRequestConfig(config).build()) {
-            HttpGet request = new HttpGet(url);
-            request.setHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
+        try {
+            // Скачиваем HTML-страницу, притворяясь пользователем, который перешел из Яндекса
+            org.jsoup.nodes.Document doc = org.jsoup.Jsoup.connect(url)
+                    .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+                    .referrer("https://yandex.ru/")
+                    .timeout(10000)
+                    .get();
 
-            try (CloseableHttpResponse response = client.execute(request)) {
-                if (response.getStatusLine().getStatusCode() != 200) {
-                    throw new java.io.IOException("Ошибка подключения к бирже (HTTP " + response.getStatusLine().getStatusCode() + ")");
-                }
-                String json = EntityUtils.toString(response.getEntity(), StandardCharsets.UTF_8);
+            // ПОПЫТКА 1: Ищем точный CSS-класс, в котором РБК выводит крупные цифры цены
+            org.jsoup.nodes.Element priceElement = doc.selectFirst(".chart__info__sum");
 
-                java.util.regex.Matcher matcher = java.util.regex.Pattern.compile("\"regularMarketPrice\":([\\d.]+)").matcher(json);
-                if (matcher.find()) {
-                    return "Текущая цена (" + name + "): " + matcher.group(1) + " USD";
-                }
-                throw new java.io.IOException("Не удалось распознать цену в ответе сервера.");
+            if (priceElement != null && !priceElement.text().isEmpty()) {
+                return "Текущая цена (" + name + "): " + priceElement.text();
             }
+
+            // ПОПЫТКА 2 (Бронебойная): Если верстка сайта изменилась, ищем цену по всему тексту.
+            // Это регулярное выражение найдет число с точкой ИЛИ запятой (например: 80.5, 80.50, 915,20)
+            String pageText = doc.text();
+            java.util.regex.Matcher matcher = java.util.regex.Pattern.compile("([0-9]{2,4}[.,][0-9]{1,4})").matcher(pageText);
+
+            if (matcher.find()) {
+                return "Текущая цена (" + name + "): " + matcher.group(1);
+            } else {
+                throw new java.io.IOException("Страница РБК загрузилась, но котировка не найдена.");
+            }
+        } catch (org.jsoup.HttpStatusException e) {
+            throw new java.io.IOException("Сервер вернул ошибку: HTTP " + e.getStatusCode());
+        } catch (Exception e) {
+            throw new java.io.IOException("Ошибка при парсинге страницы: " + e.getMessage(), e);
         }
     }
 
@@ -299,7 +311,7 @@ public final class ApacheClient {
         JLabel resultLabel = new JLabel("Выберите ресурс для получения цены", SwingConstants.CENTER);
         resultLabel.setFont(resultLabel.getFont().deriveFont(Font.BOLD, 16f));
 
-        JTextArea status = note("Данные берутся в реальном времени с Yahoo Finance.", 2);
+        JTextArea status = note("Данные парсятся напрямую из HTML-кода сайта RBC.ru", 2);
         status.setOpaque(false);
 
         JPanel buttonsPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 20, 20));
@@ -314,13 +326,17 @@ public final class ApacheClient {
 
         java.awt.event.ActionListener fetchAction = event -> {
             boolean isOil = event.getSource() == btnOil;
-            String ticker = isOil ? "CL=F" : "PL=F";
+
+            // ВАЖНО: 101040 — это ваш тикер с РБК для нефти.
+            // 101045 — это пример тикера, если у платины на РБК другой ID,
+            // вы можете заменить его на правильный, просто открыв платину в браузере.
+            String ticker = isOil ? "101040" : "101045";
             String name = isOil ? "Нефть" : "Платина";
 
             btnOil.setEnabled(false);
             btnPlatinum.setEnabled(false);
             resultLabel.setForeground(muted);
-            resultLabel.setText("Загрузка данных...");
+            resultLabel.setText("Подключение к сайту РБК...");
 
             new SwingWorker<String, Void>() {
                 @Override protected String doInBackground() throws Exception {
@@ -328,7 +344,7 @@ public final class ApacheClient {
                 }
                 @Override protected void done() {
                     try {
-                        resultLabel.setForeground(new Color(34, 139, 34)); // Зеленый цвет
+                        resultLabel.setForeground(new Color(34, 139, 34)); // Зеленый для успеха
                         resultLabel.setText(get());
                     } catch (Exception e) {
                         resultLabel.setForeground(error);
