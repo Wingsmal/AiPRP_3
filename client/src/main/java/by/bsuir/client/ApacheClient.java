@@ -47,7 +47,7 @@ public final class ApacheClient {
     }
 
     private static void showWindow() {
-        JFrame frame = new JFrame("Русско-английский словарь (и Презентация)");
+        JFrame frame = new JFrame("Русско-английский словарь (Презентация и Котировки)");
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         JPanel content = createContent();
         frame.setContentPane(content);
@@ -55,7 +55,7 @@ public final class ApacheClient {
         frame.getRootPane().setDefaultButton(primary);
         setPrimaryText(primary);
         frame.setMinimumSize(new Dimension(520, 420));
-        frame.setSize(800, 600); // Увеличено для лучшего отображения слайдов
+        frame.setSize(800, 600);
         frame.setLocationRelativeTo(null);
         frame.setVisible(true);
         ((JTextField) content.getClientProperty("wordField")).requestFocusInWindow();
@@ -184,7 +184,6 @@ public final class ApacheClient {
         presentation.add(slideScroll, BorderLayout.CENTER);
         presentation.add(controlsPanel, BorderLayout.SOUTH);
 
-        // Хранилище слайдов
         final List<BufferedImage>[] presentationSlides = new List[]{null};
         final int[] currentSlide = {0};
 
@@ -241,9 +240,11 @@ public final class ApacheClient {
             }.execute();
         });
 
+        // --- Собираем все вкладки ---
         JTabbedPane tabs = new JTabbedPane();
         tabs.addTab("Словарь", dictionary);
         tabs.addTab("Презентация", presentation);
+        tabs.addTab("Котировки", createQuotesContent());
 
         JPanel content = new JPanel(new BorderLayout());
         content.setBorder(BorderFactory.createEmptyBorder(10, 10, 0, 10));
@@ -261,6 +262,89 @@ public final class ApacheClient {
         });
 
         return content;
+    }
+
+    // --- Метод для получения котировок с Yahoo Finance ---
+    public static String fetchPrice(String ticker, String name) throws Exception {
+        String url = "https://query1.finance.yahoo.com/v8/finance/chart/" + ticker;
+
+        var config = RequestConfig.custom().setConnectTimeout(5000).setSocketTimeout(5000).build();
+        try (CloseableHttpClient client = HttpClients.custom().setDefaultRequestConfig(config).build()) {
+            HttpGet request = new HttpGet(url);
+            request.setHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
+
+            try (CloseableHttpResponse response = client.execute(request)) {
+                if (response.getStatusLine().getStatusCode() != 200) {
+                    throw new java.io.IOException("Ошибка подключения к бирже (HTTP " + response.getStatusLine().getStatusCode() + ")");
+                }
+                String json = EntityUtils.toString(response.getEntity(), StandardCharsets.UTF_8);
+
+                java.util.regex.Matcher matcher = java.util.regex.Pattern.compile("\"regularMarketPrice\":([\\d.]+)").matcher(json);
+                if (matcher.find()) {
+                    return "Текущая цена (" + name + "): " + matcher.group(1) + " USD";
+                }
+                throw new java.io.IOException("Не удалось распознать цену в ответе сервера.");
+            }
+        }
+    }
+
+    // --- Создание вкладки "Котировки" ---
+    static JPanel createQuotesContent() {
+        Color muted = UIManager.getColor("Label.foreground");
+        Color error = new Color(166, 42, 42);
+
+        JButton btnOil = new JButton("Узнать курс Нефти (WTI)");
+        JButton btnPlatinum = new JButton("Узнать курс Платины");
+
+        JLabel resultLabel = new JLabel("Выберите ресурс для получения цены", SwingConstants.CENTER);
+        resultLabel.setFont(resultLabel.getFont().deriveFont(Font.BOLD, 16f));
+
+        JTextArea status = note("Данные берутся в реальном времени с Yahoo Finance.", 2);
+        status.setOpaque(false);
+
+        JPanel buttonsPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 20, 20));
+        buttonsPanel.add(btnOil);
+        buttonsPanel.add(btnPlatinum);
+
+        JPanel quotes = new JPanel(new BorderLayout(0, 20));
+        quotes.setBorder(BorderFactory.createEmptyBorder(40, 20, 20, 20));
+        quotes.add(buttonsPanel, BorderLayout.NORTH);
+        quotes.add(resultLabel, BorderLayout.CENTER);
+        quotes.add(status, BorderLayout.SOUTH);
+
+        java.awt.event.ActionListener fetchAction = event -> {
+            boolean isOil = event.getSource() == btnOil;
+            String ticker = isOil ? "CL=F" : "PL=F";
+            String name = isOil ? "Нефть" : "Платина";
+
+            btnOil.setEnabled(false);
+            btnPlatinum.setEnabled(false);
+            resultLabel.setForeground(muted);
+            resultLabel.setText("Загрузка данных...");
+
+            new SwingWorker<String, Void>() {
+                @Override protected String doInBackground() throws Exception {
+                    return fetchPrice(ticker, name);
+                }
+                @Override protected void done() {
+                    try {
+                        resultLabel.setForeground(new Color(34, 139, 34)); // Зеленый цвет
+                        resultLabel.setText(get());
+                    } catch (Exception e) {
+                        resultLabel.setForeground(error);
+                        resultLabel.setText(errorMessage(e));
+                    } finally {
+                        btnOil.setEnabled(true);
+                        btnPlatinum.setEnabled(true);
+                    }
+                }
+            }.execute();
+        };
+
+        btnOil.addActionListener(fetchAction);
+        btnPlatinum.addActionListener(fetchAction);
+
+        return quotes;
     }
 
     private static void setPrimaryText(JButton button) {
